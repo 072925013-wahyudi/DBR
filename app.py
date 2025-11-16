@@ -9,7 +9,7 @@ import os
 
 # Konfigurasi halaman
 st.set_page_config(
-    page_title="Aplikasi Inventarisasi Barang",
+    page_title="Inputan Inventarisasi Barang (DBR)",
     page_icon="📦",
     layout="wide"
 )
