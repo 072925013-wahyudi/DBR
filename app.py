@@ -411,7 +411,7 @@ class InventoryAppStreamlit:
     
     def run(self):
         """Jalankan aplikasi"""
-        st.title("📦 Aplikasi Inventarisasi Barang")
+        st.title("📦 Inputan Inventarisasi Barang (DBR)")
         st.markdown("---")
         
         # Tab untuk organisasi yang lebih baik
