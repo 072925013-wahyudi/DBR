@@ -187,6 +187,31 @@ class InventoryAppStreamlit:
             st.error(f"Error menyimpan data: {e}")
             return False
     
+    def update_in_excel(self, data, excel_row):
+        """Update data di file Excel berdasarkan nomor baris"""
+        try:
+            if os.path.exists(self.filename):
+                workbook = openpyxl.load_workbook(self.filename)
+                sheet = workbook["TEMPLATE"]
+                
+                # Update data di baris yang spesifik
+                sheet.cell(row=excel_row, column=1, value=data['No'])
+                sheet.cell(row=excel_row, column=2, value=data['No Urut Pendaftaran'])
+                sheet.cell(row=excel_row, column=3, value=data['Nama Barang'])
+                sheet.cell(row=excel_row, column=4, value=data['Merk/Type'])
+                sheet.cell(row=excel_row, column=5, value=data['Kode Barang'])
+                sheet.cell(row=excel_row, column=6, value=data['Tahun Perolehan'])
+                sheet.cell(row=excel_row, column=7, value=data['Jumlah'])
+                sheet.cell(row=excel_row, column=8, value=data['Keterangan'])
+                
+                workbook.save(self.filename)
+                workbook.close()
+                return True
+            return False
+        except Exception as e:
+            st.error(f"Error mengupdate data: {e}")
+            return False
+    
     def delete_from_excel(self, excel_row):
         """Hapus data dari file Excel berdasarkan nomor baris"""
         try:
@@ -266,60 +291,111 @@ class InventoryAppStreamlit:
                         st.session_state.data_barang = self.load_existing_data()
     
     def render_data_table(self):
-        """Render tabel data barang dengan fitur hapus"""
+        """Render tabel data barang dengan fitur edit dan hapus per baris"""
         st.header("📊 Data Barang Inventaris")
         
         # Muat data
         data = self.load_existing_data()
         
         if data:
-            # Konversi ke DataFrame untuk tampilan
-            df_display = pd.DataFrame(data)
-            df_display = df_display.drop('Excel_Row', axis=1)  # Sembunyikan kolom Excel_Row
-            
-            # Tampilkan tabel
-            st.dataframe(df_display, use_container_width=True)
-            
-            # Section untuk menghapus data
-            st.subheader("🗑️ Hapus Data Barang")
-            st.write("Pilih data yang akan dihapus:")
-            
-            # Buat selectbox untuk memilih data yang akan dihapus
-            pilihan_hapus = [f"{item['No']}. {item['Nama Barang']} - {item['Keterangan']}" 
-                           for item in data]
-            
-            if pilihan_hapus:
-                selected_for_delete = st.selectbox(
-                    "Pilih barang untuk dihapus:",
-                    options=pilihan_hapus,
-                    key="delete_select"
-                )
-                
-                # Tombol konfirmasi hapus
-                col1, col2 = st.columns([1, 4])
-                with col1:
-                    if st.button("🚫 Hapus Data Terpilih", type="secondary"):
-                        # Cari index data yang dipilih
-                        selected_index = pilihan_hapus.index(selected_for_delete)
-                        selected_data = data[selected_index]
-                        
-                        # Konfirmasi hapus
-                        if st.session_state.get('confirm_delete') != selected_data['Excel_Row']:
-                            st.session_state.confirm_delete = selected_data['Excel_Row']
-                            st.warning(f"Yakin ingin menghapus **{selected_data['Nama Barang']}**?")
-                        else:
-                            # Eksekusi hapus
-                            if self.delete_from_excel(selected_data['Excel_Row']):
-                                st.success(f"✅ Data {selected_data['Nama Barang']} berhasil dihapus!")
+            # Tampilkan data dalam format tabel dengan fitur edit/hapus
+            for i, item in enumerate(data):
+                with st.container():
+                    col1, col2, col3, col4, col5, col6, col7, col8, col9, col10 = st.columns([1, 2, 3, 2, 2, 2, 1, 2, 1, 1])
+                    
+                    with col1:
+                        st.write(f"**{item['No']}**")
+                    
+                    with col2:
+                        no_urut = st.text_input(
+                            "No Urut", 
+                            value=item['No Urut Pendaftaran'],
+                            key=f"no_urut_{i}",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col3:
+                        nama_barang = st.text_input(
+                            "Nama Barang",
+                            value=item['Nama Barang'],
+                            key=f"nama_barang_{i}",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col4:
+                        merk_type = st.text_input(
+                            "Merk/Type",
+                            value=item['Merk/Type'],
+                            key=f"merk_type_{i}",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col5:
+                        kode_barang = st.text_input(
+                            "Kode Barang",
+                            value=item['Kode Barang'],
+                            key=f"kode_barang_{i}",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col6:
+                        tahun_perolehan = st.text_input(
+                            "Tahun Perolehan",
+                            value=item['Tahun Perolehan'],
+                            key=f"tahun_{i}",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col7:
+                        jumlah = st.text_input(
+                            "Jumlah",
+                            value=item['Jumlah'],
+                            key=f"jumlah_{i}",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col8:
+                        keterangan = st.selectbox(
+                            "Keterangan",
+                            ["Baik", "Rusak", "Usang", "Hibah Pusdatin", "Lainnya"],
+                            index=["Baik", "Rusak", "Usang", "Hibah Pusdatin", "Lainnya"].index(item['Keterangan']) if item['Keterangan'] in ["Baik", "Rusak", "Usang", "Hibah Pusdatin", "Lainnya"] else 0,
+                            key=f"keterangan_{i}",
+                            label_visibility="collapsed"
+                        )
+                    
+                    with col9:
+                        if st.button("✏️", key=f"edit_{i}", help="Edit data"):
+                            updated_data = {
+                                'No': item['No'],
+                                'No Urut Pendaftaran': no_urut,
+                                'Nama Barang': nama_barang,
+                                'Merk/Type': merk_type,
+                                'Kode Barang': kode_barang,
+                                'Tahun Perolehan': tahun_perolehan,
+                                'Jumlah': jumlah,
+                                'Keterangan': keterangan
+                            }
+                            
+                            if self.update_in_excel(updated_data, item['Excel_Row']):
+                                st.success(f"✅ Data {nama_barang} berhasil diupdate!")
                                 st.session_state.data_barang = self.load_existing_data()
-                                st.session_state.confirm_delete = None
+                                st.rerun()
+                    
+                    with col10:
+                        if st.button("🗑️", key=f"delete_{i}", help="Hapus data"):
+                            if self.delete_from_excel(item['Excel_Row']):
+                                st.success(f"✅ Data {item['Nama Barang']} berhasil dihapus!")
+                                st.session_state.data_barang = self.load_existing_data()
                                 st.rerun()
                 
-                with col2:
-                    # Tombol refresh data
-                    if st.button("🔄 Refresh Data"):
-                        st.session_state.data_barang = self.load_existing_data()
-                        st.rerun()
+                st.divider()
+            
+            # Tombol refresh data
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                if st.button("🔄 Refresh Data"):
+                    st.session_state.data_barang = self.load_existing_data()
+                    st.rerun()
             
             # Download link untuk file Excel lengkap
             st.markdown("---")
@@ -352,11 +428,12 @@ class InventoryAppStreamlit:
             st.markdown("""
             ### Cara Penggunaan:
             1. **Input Data**: Gunakan tab "Input Data" untuk menambahkan barang inventaris
-            2. **Lihat & Hapus Data**: Gunakan tab "Data Barang" untuk melihat dan menghapus data
+            2. **Edit/Hapus Data**: Gunakan tab "Data Barang" untuk mengedit atau menghapus data langsung di setiap baris
             3. **Download**: Gunakan link download untuk mendapatkan file Excel lengkap
             
             ### Fitur Baru:
-            - ❌ **Hapus Data**: Dapat menghapus data barang yang tidak diperlukan
+            - ✏️ **Edit Data**: Klik tombol edit (✏️) di setiap baris untuk mengupdate data
+            - 🗑️ **Hapus Data**: Klik tombol hapus (🗑️) di setiap baris untuk menghapus data
             - 🔄 **Refresh Data**: Memperbarui tampilan data terbaru
             - 📥 **Download Excel**: Mendownload file Excel dengan format DBR
             
