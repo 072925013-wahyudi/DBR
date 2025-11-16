@@ -135,7 +135,8 @@ class InventoryAppStreamlit:
                                 'Kode Barang': row[4] or "",
                                 'Tahun Perolehan': row[5] or "",
                                 'Jumlah': row[6] or "",
-                                'Keterangan': row[7] or ""
+                                'Keterangan': row[7] or "",
+                                'Excel_Row': row_num  # Simpan nomor baris Excel untuk referensi
                             })
                         row_num += 1
                     
@@ -186,6 +187,24 @@ class InventoryAppStreamlit:
             st.error(f"Error menyimpan data: {e}")
             return False
     
+    def delete_from_excel(self, excel_row):
+        """Hapus data dari file Excel berdasarkan nomor baris"""
+        try:
+            if os.path.exists(self.filename):
+                workbook = openpyxl.load_workbook(self.filename)
+                sheet = workbook["TEMPLATE"]
+                
+                # Hapus baris dengan menggeser ke atas
+                sheet.delete_rows(excel_row)
+                
+                workbook.save(self.filename)
+                workbook.close()
+                return True
+            return False
+        except Exception as e:
+            st.error(f"Error menghapus data: {e}")
+            return False
+    
     def get_excel_download_link(self):
         """Generate link untuk download file Excel"""
         try:
@@ -194,7 +213,7 @@ class InventoryAppStreamlit:
                     excel_data = file.read()
                 
                 b64 = base64.b64encode(excel_data).decode()
-                href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{self.filename}">Download File Excel</a>'
+                href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{self.filename}">📥 Download File Excel</a>'
                 return href
             return None
         except Exception as e:
@@ -223,8 +242,8 @@ class InventoryAppStreamlit:
                                               placeholder="Masukkan tahun perolehan")
                 jumlah = st.text_input("Jumlah Barang", 
                                      placeholder="Masukkan jumlah barang")
-                keterangan = st.text_input("Keterangan", 
-                                         placeholder="Masukkan keterangan")
+                keterangan = st.selectbox("Keterangan", 
+                                        ["Baik", "Rusak", "Usang", "Hibah Pusdatin", "Lainnya"])
             
             submitted = st.form_submit_button("💾 Simpan Data")
             
@@ -247,56 +266,72 @@ class InventoryAppStreamlit:
                         st.session_state.data_barang = self.load_existing_data()
     
     def render_data_table(self):
-        """Render tabel data barang"""
+        """Render tabel data barang dengan fitur hapus"""
         st.header("📊 Data Barang Inventaris")
         
         # Muat data
         data = self.load_existing_data()
         
         if data:
-            df = pd.DataFrame(data)
-            st.dataframe(df, use_container_width=True)
+            # Konversi ke DataFrame untuk tampilan
+            df_display = pd.DataFrame(data)
+            df_display = df_display.drop('Excel_Row', axis=1)  # Sembunyikan kolom Excel_Row
             
-            # Tombol aksi
-            col1, col2, col3 = st.columns(3)
+            # Tampilkan tabel
+            st.dataframe(df_display, use_container_width=True)
             
-            with col1:
-                if st.button("🔄 Refresh Data"):
-                    st.session_state.data_barang = self.load_existing_data()
-                    st.rerun()
+            # Section untuk menghapus data
+            st.subheader("🗑️ Hapus Data Barang")
+            st.write("Pilih data yang akan dihapus:")
             
-            with col2:
-                # Download link
-                download_link = self.get_excel_download_link()
-                if download_link:
-                    st.markdown(download_link, unsafe_allow_html=True)
+            # Buat selectbox untuk memilih data yang akan dihapus
+            pilihan_hapus = [f"{item['No']}. {item['Nama Barang']} - {item['Keterangan']}" 
+                           for item in data]
             
-            with col3:
-                if st.button("🖨️ Cetak/Export"):
-                    self.export_to_excel()
+            if pilihan_hapus:
+                selected_for_delete = st.selectbox(
+                    "Pilih barang untuk dihapus:",
+                    options=pilihan_hapus,
+                    key="delete_select"
+                )
+                
+                # Tombol konfirmasi hapus
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    if st.button("🚫 Hapus Data Terpilih", type="secondary"):
+                        # Cari index data yang dipilih
+                        selected_index = pilihan_hapus.index(selected_for_delete)
+                        selected_data = data[selected_index]
+                        
+                        # Konfirmasi hapus
+                        if st.session_state.get('confirm_delete') != selected_data['Excel_Row']:
+                            st.session_state.confirm_delete = selected_data['Excel_Row']
+                            st.warning(f"Yakin ingin menghapus **{selected_data['Nama Barang']}**?")
+                        else:
+                            # Eksekusi hapus
+                            if self.delete_from_excel(selected_data['Excel_Row']):
+                                st.success(f"✅ Data {selected_data['Nama Barang']} berhasil dihapus!")
+                                st.session_state.data_barang = self.load_existing_data()
+                                st.session_state.confirm_delete = None
+                                st.rerun()
+                
+                with col2:
+                    # Tombol refresh data
+                    if st.button("🔄 Refresh Data"):
+                        st.session_state.data_barang = self.load_existing_data()
+                        st.rerun()
+            
+            # Download link untuk file Excel lengkap
+            st.markdown("---")
+            st.subheader("📥 Download Data")
+            download_link = self.get_excel_download_link()
+            if download_link:
+                st.markdown(download_link, unsafe_allow_html=True)
+            else:
+                st.info("File Excel belum tersedia untuk di-download")
+                
         else:
             st.info("📭 Belum ada data barang. Silakan input data terlebih dahulu.")
-    
-    def export_to_excel(self):
-        """Export data ke Excel untuk dicetak"""
-        try:
-            data = self.load_existing_data()
-            if data:
-                df = pd.DataFrame(data)
-                
-                # Buat file Excel dalam memory
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df.to_excel(writer, sheet_name='DATA_BARANG', index=False)
-                
-                # Download link
-                excel_data = output.getvalue()
-                b64 = base64.b64encode(excel_data).decode()
-                href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="data_barang_export.xlsx">📥 Download Data untuk Cetak</a>'
-                st.markdown(href, unsafe_allow_html=True)
-                
-        except Exception as e:
-            st.error(f"Error export data: {e}")
     
     def run(self):
         """Jalankan aplikasi"""
@@ -317,17 +352,23 @@ class InventoryAppStreamlit:
             st.markdown("""
             ### Cara Penggunaan:
             1. **Input Data**: Gunakan tab "Input Data" untuk menambahkan barang inventaris
-            2. **Lihat Data**: Gunakan tab "Data Barang" untuk melihat semua data yang tersimpan
-            3. **Download**: Gunakan tombol download untuk mendapatkan file Excel
+            2. **Lihat & Hapus Data**: Gunakan tab "Data Barang" untuk melihat dan menghapus data
+            3. **Download**: Gunakan link download untuk mendapatkan file Excel lengkap
             
-            ### Format File:
-            - Data disimpan dalam file **DBR.xlsx**
-            - Format mengikuti template DBR (Daftar Barangan Ruangan)
-            - File dapat dibuka dengan Microsoft Excel atau aplikasi spreadsheet lainnya
+            ### Fitur Baru:
+            - ❌ **Hapus Data**: Dapat menghapus data barang yang tidak diperlukan
+            - 🔄 **Refresh Data**: Memperbarui tampilan data terbaru
+            - 📥 **Download Excel**: Mendownload file Excel dengan format DBR
             
             ### Kolom Wajib:
             - ❗ **Nomor Urut Pendaftaran**
             - ❗ **Nama Barang**
+            
+            ### Keterangan Status:
+            - ✅ **Baik**: Barang dalam kondisi baik
+            - ❌ **Rusak**: Barang perlu perbaikan
+            - ⚠️ **Usang**: Barang sudah tua tapi masih berfungsi
+            - 🎁 **Hibah Pusdatin**: Barang dari hibah
             """)
 
 # Jalankan aplikasi
